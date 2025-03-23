@@ -1,0 +1,15 @@
+[Unit]
+Description=Nutrition App Development Server
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/app/nutrition-app
+ExecStart=/home/ubuntu/app/venv/bin/python /home/ubuntu/app/nutrition-app/manage.py runserver 0.0.0.0:8000
+Environment="PATH=/home/ubuntu/app/venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=nutrition_app.settings"
+
+[Install]
+WantedBy=multi-user.target
+
