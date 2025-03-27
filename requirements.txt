@@ -1,0 +1,13 @@
+django-cors-headers
+cryptography
+redis
+django
+gunicorn
+djangorestframework
+drf-yasg
+drf-spectacular
+djangorestframework-simplejwt
+dj-rest-auth
+django-allauth
+requests
+drf-spectacular-sidecar

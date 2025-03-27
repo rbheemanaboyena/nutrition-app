@@ -1,16 +1,36 @@
 from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
-from django.views import View
+from rest_framework.views import APIView
 from django.utils.decorators import method_decorator
 import json
 import uuid
 from .models import Restaurant, MenuItem, Ingredient, NutritionFact
 from .serializers import MenuItemSerializer
+from rest_framework import viewsets
 from rest_framework import status
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
-class RestaurantView(View):
+class RestaurantView(APIView):
+    # Define the schema for the request body
+    restaurant_schema = openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'owner_id': openapi.Schema(type=openapi.TYPE_STRING),
+            'name': openapi.Schema(type=openapi.TYPE_STRING),
+            'description': openapi.Schema(type=openapi.TYPE_STRING, default='')
+        }
+    )
+    # Define the schema for the response body
+    restaurant_response_schema = openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            'message': openapi.Schema(type=openapi.TYPE_STRING),
+            'restaurant_id': openapi.Schema(type=openapi.TYPE_STRING)
+        }
+    )
 
     @method_decorator(csrf_exempt)  # Disable CSRF
     def dispatch(self, *args, **kwargs):
@@ -44,14 +64,14 @@ class RestaurantView(View):
         restaurant.name = data.get('name', restaurant.name)
         restaurant.description = data.get('description', restaurant.description)
         restaurant.save()
-        return JsonResponse({"message": "Restaurant updated successfully."})
+        return JsonResponse({"message": "Restaurant updated successfully."}, status=status.HTTP_200_OK)
 
     def delete(self, request, id):
         restaurant = get_object_or_404(Restaurant, restaurant_id=id)
         restaurant.delete()
         return JsonResponse({"message": "Restaurant deleted successfully."})
 
-class MenuItemView(View):
+class MenuItemView(APIView):
 
     @method_decorator(csrf_exempt)  # Disable CSRF
     def dispatch(self, *args, **kwargs):
@@ -111,7 +131,7 @@ class MenuItemView(View):
     def get(self, request, id, item_id=None):
         restaurant = get_object_or_404(Restaurant, restaurant_id=id)
 
-        # **1️⃣ Get ALL items (Without ingredients & nutrition_facts)**
+        #  Get ALL items (Without ingredients & nutrition_facts)
         if item_id is None:
             menu_items = MenuItem.objects.filter(restaurant=restaurant)
             data = [
@@ -128,7 +148,6 @@ class MenuItemView(View):
             ]
             return JsonResponse({"menu_items": data}, status=200)
 
-        # **2️⃣ Get ONE item with full details (Including ingredients & nutrition_facts)**
         item = get_object_or_404(MenuItem.objects.prefetch_related("ingredients", "nutrition_facts"), item_id=item_id, restaurant=restaurant)
 
         # Fetch first NutritionFact (if exists)
@@ -174,8 +193,12 @@ class MenuItemView(View):
         menu_item.save()
         return JsonResponse({"message": "Menu item updated successfully."})
 
+    @swagger_auto_schema(
+        operation_description="Delete a menu item",
+        responses={200: openapi.Response("Menu item deleted successfully.")}
+    )
     def delete(self, request, id, item_id):
         menu_item = get_object_or_404(MenuItem, restaurant_id=id, item_id=item_id)
         menu_item.delete()
-        return JsonResponse({"message": "Menu item deleted successfully."})
+        return JsonResponse({"message": "Menu item deleted successfully."}, status=status.HTTP_200_OK)
 

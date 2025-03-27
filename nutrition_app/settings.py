@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'drf_yasg',  # Swagger
     'dj_rest_auth',
     'allauth',
+    'drf_spectacular',
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',  # Enable Google login
@@ -81,6 +82,13 @@ SWAGGER_SETTINGS = {
     'DEFAULT_AUTO_SCHEMA_CLASS': 'drf_yasg.inspectors.SwaggerAutoSchema',
 }
 
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Your Project API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SWAGGER_UI_DIST': 'SIDECAR',
+    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
+}
 # REST Framework Authentication
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (

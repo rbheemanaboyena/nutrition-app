@@ -8,5 +8,5 @@ urlpatterns = [
     path('auth/logout', LogoutView.as_view(), name='logout'),
     path('auth/refresh', RefreshTokenView.as_view(), name='refresh-token'),
     path('auth/password-reset', PasswordResetView.as_view(), name='password-reset'),
-    path('user/profile', UserProfileView.as_view(), name='user-profile'),
+    path('profile', UserProfileView.as_view(), name='user-profile'),
 ]

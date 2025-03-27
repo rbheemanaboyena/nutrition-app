@@ -10,6 +10,18 @@ class Restaurant(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 class MenuItem(models.Model):
+    """
+    Represents a menu item in a restaurant's menu."
+    attr:
+        item_id (UUID): Unique identifier for the menu item.
+        restaurant (ForeignKey): The restaurant to which this menu item belongs.
+        name (str): Name of the menu item.
+        description (str): Description of the menu item.
+        category (str): Category of the menu item (e.g., Breakfast, Lunch, Dinner).
+        price (Decimal): Price of the menu item.
+        image_url (str): URL of the image representing the menu item.
+        tags (JSONField): Tags associated with the menu item.
+    """
     CATEGORY_CHOICES = [
         ('Breakfast', 'Breakfast'),
         ('Lunch', 'Lunch'),

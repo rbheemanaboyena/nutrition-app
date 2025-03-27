@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import JsonResponse
-from .models import Order, OrderItem
+from .models import Order, OrderItem, Address, Payment
 from django.db import transaction
 import redis
 import uuid
@@ -8,11 +8,39 @@ from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from users.models import User
 
 # Redis connection setup (Example configuration)
 r = redis.StrictRedis(host='localhost', port=6379, db=0, decode_responses=True)
 
 class CartView(APIView):
+    """
+    POST /api/cart/add
+    Adds an item to the cart for a user.
+    """
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'user_id': openapi.Schema(type=openapi.TYPE_STRING, description='User ID'),
+                'item_id': openapi.Schema(type=openapi.TYPE_STRING, description='Item ID'),
+                'quantity': openapi.Schema(type=openapi.TYPE_INTEGER, description='Quantity to add'),
+            },
+        ),
+        responses={
+            200: openapi.Response('Item added to cart successfully', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING),
+                    'cart': openapi.Schema(type=openapi.TYPE_OBJECT),
+                }
+            )),
+            400: "Invalid input",
+            500: "Internal server error"
+        }
+    )
     def post(self, request, *args, **kwargs):
         """
         POST /api/cart/add
@@ -53,13 +81,31 @@ class CartView(APIView):
 
 
 class RemoveFromCart(APIView):
-    def delete(self, request, item_id, *args, **kwargs):
+    """
+    DELETE /api/cart/remove/{item_id}
+    Removes an item from the cart for a user.
+    """
+    @swagger_auto_schema(
+        responses={
+            200: openapi.Response('Item removed from cart successfully', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING),
+                }
+            )),
+            400: "Invalid input",
+            404: "Item not found in cart",
+            500: "Internal server error"
+        }
+    )
+    def delete(self, request, *args, **kwargs):
         """
-        DELETE /api/cart/remove/{item_id}
+        DELETE /api/cart/user_id/remove/{item_id}
         Removes an item from the cart for a user.
         """
         # Get the user_id from POST data
-        user_id = request.data.get('user_id')
+        user_id = kwargs.get('user_id')
+        item_id = kwargs.get('item_id')
 
         # If user_id is missing, return a bad request error
         if not user_id:
@@ -81,13 +127,17 @@ class RemoveFromCart(APIView):
 
 
 class ViewCart(APIView):
+    """
+    GET /api/cart/view
+    Views the items in the cart for a user.
+    """
     def get(self, request, *args, **kwargs):
         """
         GET /api/cart
-        Views the items in the cart for a user.
+    def get(self, request):
         """
-        # Get the user_id from query parameters
-        user_id = request.GET.get('user_id')
+        # Get the user_id from the path parameters
+        user_id = kwargs.get('user_id')
 
         # If user_id is missing, return a bad request error
         if not user_id:
@@ -121,26 +171,67 @@ class ViewCart(APIView):
 
 
 class Checkout(APIView):
+    """
+    POST /api/order/checkout
+    Handles the checkout process, including saving addresses, payments, and creating an order.
+    """
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'user_id': openapi.Schema(type=openapi.TYPE_STRING, description='User ID'),
+                'street': openapi.Schema(type=openapi.TYPE_STRING, description='Street address'),
+                'city': openapi.Schema(type=openapi.TYPE_STRING, description='City'),
+                'state': openapi.Schema(type=openapi.TYPE_STRING, description='State'),
+                'zip_code': openapi.Schema(type=openapi.TYPE_STRING, description='Zip code'),
+                'country': openapi.Schema(type=openapi.TYPE_STRING, description='Country'),
+                'payment_method': openapi.Schema(type=openapi.TYPE_STRING, description='Payment method (card, cash, etc.)'),
+                'card_number': openapi.Schema(type=openapi.TYPE_STRING, description='Card number (if applicable)', nullable=True),
+                'expiry_date': openapi.Schema(type=openapi.TYPE_STRING, description='Expiry date (if applicable)', nullable=True),
+                'cvv': openapi.Schema(type=openapi.TYPE_STRING, description='CVV (if applicable)', nullable=True),
+                'promo_code': openapi.Schema(type=openapi.TYPE_STRING, description='Promo code (optional)'),
+            },
+        ),
+        responses={
+            201: openapi.Response('Order created successfully', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING),
+                    'order_id': openapi.Schema(type=openapi.TYPE_STRING),
+                    'total_price': openapi.Schema(type=openapi.TYPE_NUMBER),
+                    'payment_status': openapi.Schema(type=openapi.TYPE_STRING),
+                    'order_status': openapi.Schema(type=openapi.TYPE_STRING),
+                }
+            )),
+            400: "Invalid input",
+            500: "Internal server error"
+        }
+    )
     def post(self, request, *args, **kwargs):
         """
-        POST /api/order/checkout
-        Handles the checkout process, including applying promo codes and creating an order.
+        Handles the checkout process, including saving addresses, payments, and creating an order.
         """
-        # Get the user details from the request
-        user_id_str = request.data.get('user_id')
-        delivery_address = request.data.get('delivery_address')
+        user_id = request.data.get('user_id')
+        street = request.data.get('street')
+        city = request.data.get('city')
+        state = request.data.get('state')
+        zip_code = request.data.get('zip_code')
+        country = request.data.get('country')
         payment_method = request.data.get('payment_method')
+        card_number = request.data.get('card_number', None)
+        expiry_date = request.data.get('expiry_date', None)
+        cvv = request.data.get('cvv', None)
         promo_code = request.data.get('promo_code', None)
 
-        # Ensure user_id, delivery_address, and payment_method are provided
-        if not user_id_str or not delivery_address or not payment_method:
-            return Response({"error": "user_id, delivery_address, and payment_method are required."}, status=status.HTTP_400_BAD_REQUEST)
+        # Ensure required fields are provided
+        if not user_id or not street or not city or not state or not zip_code or not country or not payment_method:
+            return Response({"error": "user_id, street, city, state, zip_code, country, and payment_method are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Convert user_id to a UUID format
-        try:
-            user_id = uuid.UUID(user_id_str)  # Converts the string to a UUID
-        except ValueError:
-            return JsonResponse({"error": "Invalid user_id format."}, status=status.HTTP_400_BAD_REQUEST)
+        # Validate user exists
+        # try:
+        #     user = User.objects.get(user_id=user_id)
+        # except User.DoesNotExist:
+        #     return Response({"error": "Invalid user ID."}, status=status.HTTP_400_BAD_REQUEST)
 
         cart_key = f'cart:{user_id}'
         cart = r.hgetall(cart_key)
@@ -149,39 +240,75 @@ class Checkout(APIView):
         if not cart:
             return JsonResponse({"message": "Cart is empty."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Calculate total price (apply discount if promo_code is valid)
-        total_price = 0
-        for item_id, quantity in cart.items():
-            price = 10.99  # Example price for each item
-            total_price += price * int(quantity)
+        # Calculate total price
+        total_price = sum(10.99 * int(quantity) for item_id, quantity in cart.items())
 
         # Apply promo code discount if valid
+        discount = 0.00
         if promo_code == "DISCOUNT10":
-            total_price *= 0.9  # Apply 10% discount
+            discount = total_price * 0.10
+            total_price -= discount
 
-        # Create an order entry with a transaction to ensure atomicity
+        # Use transaction to ensure atomicity
         try:
             with transaction.atomic():
-                # Create the Order
-                order = Order.objects.create(
-                    user_id=user_id,
-                    total_price=total_price,
-                    discount=0.00,  # If any discount applied, update here
-                    payment_status='pending',  # Default payment status is pending
-                    order_status='processing',  # Default order status is processing
+                # Save address
+                user = User.objects.get(user_id=user_id)  # Fetch the User instance
+                address = Address.objects.create(
+                    user_id=user,
+                    street=street,
+                    city=city,
+                    state=state,
+                    zip_code=zip_code,
+                    country=country,
+                    is_default=True  # Mark the address as default if needed
                 )
 
-                # Add items to the OrderItems table
+                # Create order
+                order = Order.objects.create(
+                    user_id=user,
+                    total_price=total_price,
+                    discount=discount,
+                    payment_status='pending',
+                    order_status='processing'
+                )
+
+                # Save order items
                 for item_id, quantity in cart.items():
-                    price = 10.99  # Example price for each item
                     OrderItem.objects.create(
-                        order=order,
+                        order_id=order.order_id,
                         item_id=item_id,
                         quantity=int(quantity),
-                        price=price
+                        price=10.99
                     )
 
-            # Remove cart from Redis after order creation
+                # Save payment details
+                if payment_method == 'card':
+                    # Extract card details
+                    card_last4 = card_number[-4:] if card_number else None
+                    card_type = 'Other'  # Default card type, can be updated based on card validation logic
+                    exp_month, exp_year = map(int, expiry_date.split('/')) if expiry_date else (None, None)
+
+                    # Save payment details
+                    payment = Payment.objects.create(
+                        user_id=user,
+                        card_last4=card_last4,
+                        card_type=card_type,
+                        exp_month=exp_month,
+                        exp_year=exp_year,
+                        is_default=True  # Mark as default if needed
+                    )
+                else:
+                    payment = Payment.objects.create(
+                        user_id=user,
+                        card_last4=None,
+                        card_type='Other',
+                        exp_month=None,
+                        exp_year=None,
+                        is_default=False
+                    )
+
+            # Remove cart from Redis after successful order placement
             r.delete(cart_key)
 
             return JsonResponse({
@@ -195,24 +322,79 @@ class Checkout(APIView):
         except Exception as e:
             return JsonResponse({"message": f"Error occurred while placing the order: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-def payment_processing(request):
-    # POST /api/order/payment
-    order_id = request.POST.get('order_id')
-    payment_token = request.POST.get('payment_token')
+class PaymentPrcessing(APIView):
+    """
+    POST /api/order/payment
+    Handles payment processing for an order.
+    """
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'order_id': openapi.Schema(type=openapi.TYPE_STRING, description='Order ID'),
+                'payment_token': openapi.Schema(type=openapi.TYPE_STRING, description='Payment token from Stripe/PayPal'),
+            },
+        ),
+        responses={
+            200: openapi.Response('Payment successful', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING),
+                    'payment_status': openapi.Schema(type=openapi.TYPE_STRING),
+                }
+            )),
+            400: "Invalid input",
+            500: "Internal server error"
+        }
+    )
+    def post(self, request):
+        """
+        Handles payment processing for an order.
+        """
+        # Get the order ID and payment token from the request
+        order_id = request.data.get('order_id')
+        payment_token = request.data.get('payment_token')
 
-    # Payment processing with external service (Stripe/PayPal) would go here
-    # For demonstration, we assume the payment is successful
+        # Validate input
+        if not order_id or not payment_token:
+            return Response({"error": "order_id and payment_token are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-    order = Order.objects.get(order_id=order_id)
-    order.payment_status = "completed"
-    order.save()
+        try:
+            # Process payment with external service (e.g., Stripe/PayPal)
+            # This is a placeholder for actual payment processing logic
+            # For example, using Stripe API to charge the card
 
-    return JsonResponse({"message": "Payment successful.", "payment_status": "completed"})
+            # Simulate successful payment processing
+            payment_status = "completed"  # Change this based on actual payment result
+
+            return Response({"message": "Payment processed successfully.", "payment_status": payment_status}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": f"Payment processing failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-def order_history(request):
-    # GET /api/order/history
-    user_id = request.GET.get('user_id')
-    orders = Order.objects.filter(user_id=user_id).values("order_id", "total_price", "order_status", "created_at")
+class OrderHistory(APIView):
+    """
+    GET /api/order/history
+    Retrieves the order history for a given user.
+    """
+    def get(self, request, **kwargs):
+        user_id_str = kwargs.get('user_id')
 
-    return JsonResponse({"orders": list(orders)})
+        # Validate user_id presence
+        if not user_id_str:
+            return Response({"error": "user_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate UUID format for user_id
+        try:
+            user_id = uuid.UUID(user_id_str)
+        except ValueError:
+            return Response({"error": f"Invalid user_id format: {user_id_str}. Ensure it's a valid UUID."}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Fetch order history
+        orders = Order.objects.filter(user_id=user_id).values(
+            "order_id", "total_price", "order_status", "created_at"
+        )
+
+        return Response({"orders": list(orders)}, status=status.HTTP_200_OK)

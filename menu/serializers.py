@@ -4,5 +4,4 @@ from .models import MenuItem
 class MenuItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = MenuItem
-        fields = "__all__"
-
+        fields = '__all__'
