@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-(svdn=3ge=0^2licp&#r^myk6gfry01*)x*o9=s043pr@vph=e
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["18.118.149.210", "nutrition.com", "www.nutrition.com" "127.0.0.1"]
+ALLOWED_HOSTS = ["18.118.149.210", "nutrition.com", "www.nutrition.com", "127.0.0.1"]
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 

@@ -12,13 +12,42 @@ from .models import User, OTPVerification
 import jwt, datetime, redis
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 # Redis connection
 redis_client = redis.StrictRedis(host='localhost', port=6379, db=0, decode_responses=True)
 
 class RegisterView(APIView):
+    """
+    User Registration View
+    Handles user registration and sends an OTP for email verification."
+    """
     permission_classes = [AllowAny]
     
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'full_name': openapi.Schema(type=openapi.TYPE_STRING),
+                'email': openapi.Schema(type=openapi.TYPE_STRING),
+                'password': openapi.Schema(type=openapi.TYPE_STRING),
+                'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
+                'role': openapi.Schema(type=openapi.TYPE_STRING, default='customer')
+            }
+        ),
+        responses={
+            201: openapi.Response(
+                description="User registered successfully.",
+                examples={
+                    "application/json": {
+                        "message": "User registered successfully. Verify email to continue.",
+                        "user_id": "<user_id>"
+                    }
+                }
+            )
+        }
+    )
     def post(self, request):
         data = request.data
         password_hash = make_password(data['password'])
@@ -37,8 +66,30 @@ class RegisterView(APIView):
         return response
 
 class VerifyEmailView(APIView):
+    """
+    Email Verification View
+    Handles email verification using OTP."
+    """
     permission_classes = [AllowAny]
-    
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'email': openapi.Schema(type=openapi.TYPE_STRING),
+                'otp': openapi.Schema(type=openapi.TYPE_STRING)
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description="Email verified successfully.",
+                examples={
+                    "application/json": {
+                        "message": "Email verified successfully."
+                    }
+                }
+            )
+        }
+    )
     def post(self, request):
         data = request.data
         otp_record = OTPVerification.objects.filter(email=data['email'], otp_code=data['otp']).first()
@@ -53,8 +104,33 @@ class VerifyEmailView(APIView):
         return response
 
 class LoginView(APIView):
+    """
+    User Login View
+    Handles user login and generates JWT tokens."
+    """
     permission_classes = [AllowAny]
-    
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'email': openapi.Schema(type=openapi.TYPE_STRING),
+                'password': openapi.Schema(type=openapi.TYPE_STRING)
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description="User logged in successfully.",
+                examples={
+                    "application/json": {
+                        "access_token": "<access_token>",
+                        "refresh_token": "<refresh_token>",
+                        "user_id": "<user_id>",
+                        "expires_in": 900
+                    }
+                }
+            )
+        }
+    )
     def post(self, request):
         data = request.data
         user = User.objects.filter(email=data['email']).first()
@@ -68,8 +144,29 @@ class LoginView(APIView):
         return response
 
 class LogoutView(APIView):
+    """
+    User Logout View
+    Handles user logout and invalidates the session."
+    """
     permission_classes = [IsAuthenticated]
-    
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'user_id': openapi.Schema(type=openapi.TYPE_STRING)
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description="User logged out successfully.",
+                examples={
+                    "application/json": {
+                        "message": "User logged out successfully."
+                    }
+                }
+            )
+        }
+    )
     def post(self, request):
         user_id = request.data.get('user_id')
         redis_client.delete(f'session:{user_id}')
@@ -120,11 +217,14 @@ def get_user_from_token(request):
         raise AuthenticationFailed("Invalid token.")
 
 class UserProfileView(APIView):
+    """
+    User Profile View
+    Fetches user profile information based on user_id."
+    """
     permission_classes = [AllowAny]
-
-    def get(self, request):
-        # Extract the user_id from query parameters
-        user_id = request.data.get("user_id")
+    def get(self, *args, **kwargs):
+        print("Fetching user profile")
+        user_id = kwargs.get('user_id')
 
         if not user_id:
             return Response({"detail": "user_id is required."}, status=status.HTTP_400_BAD_REQUEST)
@@ -150,6 +250,10 @@ class UserProfileView(APIView):
 
 
 class PasswordResetView(APIView):
+    """
+    Password Reset View
+    Handles password reset functionality."
+    """
     permission_classes = [AllowAny]
 
     def post(self, request):
