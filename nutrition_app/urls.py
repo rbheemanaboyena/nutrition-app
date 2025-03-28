@@ -20,7 +20,7 @@ schema_view = get_schema_view(
         license=openapi.License(name="MIT License"),
     ),
     public=True,
-    permission_classes=[permissions.IsAuthenticated],  # Require authentication for accessing Swagger UI
+    permission_classes=[permissions.AllowAny],  # Require authentication for accessing Swagger UI
 )
 
 urlpatterns = [
